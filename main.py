@@ -7,11 +7,13 @@ import platform
 import pyttsx3
 import speech_recognition as sr
 from transformers import pipeline
+import requests
+from bs4 import BeautifulSoup
 
 engine = pyttsx3.init()
 
 def speak(text):
-    engine.say(text)
+    engine.say(f"{text}")
     engine.runAndWait()
 
 recognizer = sr.Recognizer()
@@ -24,18 +26,16 @@ def listen():
         print("Ouvindo...")
         recognizer.adjust_for_ambient_noise(source, duration=1)
         try:
-            audio = recognizer.listen(source, timeout=10, phrase_time_limit=10)
+            audio = recognizer.listen(source, timeout=30, phrase_time_limit=30)
             command = recognizer.recognize_google(audio, language="pt-BR")
             print(f"Você disse: {command}")
             return command.lower()
         except sr.UnknownValueError:
-            speak("Desculpe, não entendi. Pode repetir?")
             return ""
         except sr.WaitTimeoutError:
-            speak("Você ficou em silêncio por muito tempo. Tente novamente.")
             return ""
         except sr.RequestError:
-            speak("Serviço de reconhecimento de fala indisponível.")
+            speak("Desculpe patrão, o serviço de reconhecimento de fala está indisponível.")
             return ""
 
 OS_TYPE = platform.system()
@@ -44,7 +44,7 @@ APP_CACHE = {}
 
 def find_application(app_name):
     """
-    Busca o caminho do aplicativo pelo nome. Funciona no Windows, macOS e Linux.
+    Busca o caminho do aplicativo pelo nome.
     """
     global APP_CACHE
 
@@ -73,7 +73,7 @@ def find_application(app_name):
 
 def open_application(app_name):
     """
-    Abre um aplicativo pelo nome, usando o caminho encontrado dinamicamente.
+    Abre um aplicativo pelo nome.
     """
     path = find_application(app_name)
     if path:
@@ -104,6 +104,18 @@ def open_youtube(query):
         url = f"https://www.youtube.com/results?search_query={query}"
         webbrowser.open(url)
         speak(f"Abrindo o YouTube para pesquisar {query}.")
+    
+def open_azure(area):
+    if area == "portal":
+        url = f"https://portal.azure.com/#home"
+        webbrowser.open(url)
+        speak(f"Abrindo o portal azure!")
+    elif area == "demandas" or area == "demanda" or area == "cards" or area == "boards" or area == "devops":
+        url = f"https://dev.azure.com/forlogic/Adven.tech/_boards/board/t/Dev/Backlog%20items"
+        webbrowser.open(url)
+        speak(f"Abrindo os boards azure!")
+    else:
+        speak(f"Desculpe patrão, mas ainda não conheço essa área!")
 
 def tell_joke():
     jokes = [
@@ -118,57 +130,89 @@ def get_time():
     time_str = now.strftime("%H:%M")
     speak(f"A hora atual é {time_str}.")
 
-def predict_intention(command):
+def alfred_quotes():
+    quotes = [
+        "Por que caímos, patrão? Para aprendermos a nos levantar.",
+        "Alguns homens só querem ver o mundo pegar fogo.",
+        "Até mesmo o Batman precisa de ajuda, patrão. Estou aqui para isso."
+    ]
+    speak(random.choice(quotes))
+
+def search_web(query):
     """
-    Preve a intenção do comando usando um modelo de classificação de linguagem
-    e fallback para verificações manuais.
+    Realiza uma busca no Google e retorna títulos, URLs e snippets dos resultados.
     """
-    nlp = pipeline("zero-shot-classification", model="facebook/bart-large-mnli")
-    possible_intentions = ["saudação", "abrir navegador", "hora", "piada", "abrir aplicativo"]
-    result = nlp(command, candidate_labels=possible_intentions)
+    try:
+        url = f"https://www.google.com/search?q={query}"
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36"
+        }
+        response = requests.get(url, headers=headers)
+        
+        if response.status_code != 200:
+            speak("Desculpe patrão, não consegui acessar o Google no momento.")
+            return
 
-    if "google" in command or "youtube" in command:
-        return "abrir navegador"
-    elif "hora" in command:
-        return "hora"
-    elif "piada" in command:
-        return "piada"
-    elif "abrir" in command:
-        return "abrir aplicativo"
-    return result['labels'][0]
-
-def process_command(command):
-    if command:
-        intention = predict_intention(command)
-
-        if intention == "saudação":
-            speak("Olá! Como posso ajudar?")
-        elif intention == "abrir navegador":
-            if "google" in command:
-                query = command.replace("abrir google", "").strip()
-                search_google(query)
-            elif "youtube" in command:
-                query = command.replace("abrir youtube", "").strip()
-                open_youtube(query)
-        elif intention == "hora":
-            get_time()
-        elif intention == "piada":
-            tell_joke()
-        elif intention == "abrir aplicativo":
-            app_name = command.replace("abrir", "").strip()
-            open_application(app_name)
+        soup = BeautifulSoup(response.text, "html.parser")
+        
+        results = []
+        for g in soup.select(".tF2Cxc"):
+            title = g.select_one("h3").text if g.select_one("h3") else "Sem título"
+            link = g.select_one(".yuRUbf a")["href"] if g.select_one(".yuRUbf a") else "Sem link"
+            snippet = g.select_one(".IsZvec").text if g.select_one(".IsZvec") else "Sem descrição"
+            results.append({"title": title, "link": link, "snippet": snippet})
+        
+        if not results:
+            speak("Não encontrei nada relevante para sua pesquisa.")
         else:
-            speak("Desculpe, não entendi o comando.")
+            speak("Aqui estão os resultados:")
+            for i, result in enumerate(results[:5], 1):
+                print(f"{i}. {result['title']}\n   Link: {result['link']}\n   Descrição: {result['snippet']}\n")
+                speak(f"Resultado {i}: {result['title']}")
+        
+    except Exception as e:
+        speak(f"Desculpe patrão, ocorreu um erro: {str(e)}")
+                
+def process_command(command):
+    if "sair" in command:
+        speak("Tudo bem, se precisar é só chamar patrão!")
+        return "exit"
+    elif "google" in command:
+        query = command.replace("abrir google", "").strip()
+        search_google(query)
+    elif "youtube" in command:
+        query = command.replace("abrir youtube", "").strip()
+        open_youtube(query)
+    elif "piada" in command:
+        tell_joke()
+    elif "hora" in command:
+        get_time()
+    elif "abrir" in command:
+        app_name = command.replace("abrir", "").strip()
+        open_application(app_name)
+    elif "desenvolvimento" in command:
+        area = command.replace("do desenvolvimento", "").strip()
+        open_azure(area)
+    elif "frase" in command or "motivação" in command:
+        alfred_quotes()
+    elif "pesquisar" in command or "procurar" in command:
+        query = command.replace("pesquisar", "").replace("procurar", "").strip()
+        search_web(query)
+    else:
+        speak("Desculpe, não entendi o comando patrão.")
 
 def run_assistant():
-    speak("Olá! Estou pronto para ajudar. Você pode falar agora.")
+    activated = False
+    speak("Olá patrão! Estou pronto para ajudar. Basta me chamar dizendo Alfred.")
     while True:
         command = listen()
-        if "sair" in command:
-            speak("Até logo!")
-            break
-        elif command:
-            process_command(command)
+        if not activated:
+            if "alfred" in command:
+                speak("Estou ouvindo patrão!")
+                activated = True
+        else:
+            if process_command(command) == "exit":
+                activated = False
 
 if __name__ == "__main__":
     run_assistant()
