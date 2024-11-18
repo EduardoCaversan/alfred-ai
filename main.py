@@ -211,6 +211,7 @@ def run_assistant():
                 speak("Estou ouvindo patrão!")
                 activated = True
             if "sair" in command:
+                speak("Estou saindo patrão, quando precisar é só me ativar novamente!")
                 return
         else:
             if process_command(command) == "exit":
