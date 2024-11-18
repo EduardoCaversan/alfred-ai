@@ -174,7 +174,7 @@ def search_web(query):
         speak(f"Desculpe patrão, ocorreu um erro: {str(e)}")
                 
 def process_command(command):
-    if "sair" in command:
+    if "sair" or "entendi" or "entendido" in command:
         speak("Tudo bem, se precisar é só chamar patrão!")
         return "exit"
     elif "google" in command:
@@ -210,6 +210,8 @@ def run_assistant():
             if "alfred" in command:
                 speak("Estou ouvindo patrão!")
                 activated = True
+            if "sair" in command:
+                return
         else:
             if process_command(command) == "exit":
                 activated = False
